@@ -51,11 +51,11 @@ def load_transform(path, boxdict, transform, flipping, masking):
 class ProtoSampler(Sampler):
     def __init__(self, data_source, way, shots):
         iddict = dict()
-        for i,cat in enumerate(data_source.numer_data):
-            if cat[22] in iddict:
-                iddict[cat[22]].append(i)
+        for i,(_,cat) in enumerate(data_source.imgs):
+            if cat in iddict:
+                iddict[cat].append(i)
             else:
-                iddict[cat[22]] = [i]
+                iddict[cat] = [i]
         self.iddict = iddict
         self.way = way
         self.shots = shots
