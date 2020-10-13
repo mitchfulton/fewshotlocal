@@ -3,13 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-
+"""
 class Block(nn.Module):
     def __init__(self, insize, outsize):
         super(Block, self).__init__()
         self.layers = nn.Sequential(
-            nn.Conv2d(insize, outsize, kernel_size=3, padding=1),
-            nn.BatchNorm2d(outsize)
+            nn.Conv3d(insize, outsize, kernel_size=3, padding=1),
+            nn.BatchNorm3d(outsize)
         )
         
     def forward(self, inp):
@@ -20,20 +20,51 @@ class PROTO(nn.Module):
     def __init__(self, w):
         super(PROTO, self).__init__()
         self.process = nn.Sequential(
-            Block(3,w),
+            Block(1,w),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
+            nn.MaxPool3d(2),
             Block(w,w),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
+            nn.MaxPool3d(2),
             Block(w,w),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
+            nn.MaxPool3d(2),
             Block(w,w)
         )
         
     def forward(self, inp):
         return self.process(inp)
+"""
+class Block(nn.Module):
+    def __init__(self, insize, outsize, kern, pad, stride):
+        super(Block, self).__init__()
+        self.layers = nn.Sequential(
+            nn.Conv3d(insize, outsize, kernel_size=kern, padding=pad, stride = stride),
+            nn.BatchNorm3d(outsize),
+            nn.PReLU()
+        )
+        
+    def forward(self, inp):
+        return self.layers(inp)
+
+# The 4-layer feature extractor
+class PROTO(nn.Module):
+    def __init__(self, w):
+        super(PROTO, self).__init__()
+        self.process = nn.Sequential(
+            Block(1,w,(7,7,5),3,2),
+            nn.MaxPool3d(2),
+            Block(w,w,(5,5,3),2,1),
+            nn.MaxPool3d(2),
+            Block(w,w,3,1,1),
+            nn.MaxPool3d(2),
+            Block(w,w,3,1,1)
+        )
+        
+    def forward(self, inp):
+        return self.process(inp)
+
+
 
     
 #-----------PREDICTORS
@@ -151,17 +182,17 @@ class pCL(nn.Module):
     def __init__(self, w):
         super(pCL, self).__init__()
         self.sm = nn.Softmax(dim=2)
-        self.centroids = Parameter(torch.randn(1,w,2,1,1))
+        self.centroids = Parameter(torch.randn(1,w,2,1,1,1))
         
     def forward(self, inp, _, __):
-        b = inp.size(0)
-        masks = torch.sum((inp.unsqueeze(2)-self.centroids)**2, 1).neg().unsqueeze(1) # B 1 2 10 10
+        b = inp.size(0) #batch size
+        masks = torch.sum((inp.unsqueeze(2)-self.centroids)**2, 1).neg().unsqueeze(1) # B 1 2 16 16 16
         masks = self.sm(masks)
         # Perform fore/back separation and bilinear expansion
-        bsize = masks.view(*masks.size()[:-2], -1).sum(-1)+.01
-        out = (inp.unsqueeze(2)*masks).view(b, inp.size(1), 2, -1) # B 64 2 100
-        out = (out/bsize.unsqueeze(-1).sqrt()) # B 64 2 100
-        out = (out[:,:,0].unsqueeze(1)*out[:,:,1].unsqueeze(2)).view(b, -1, out.size(-1)).sum(-1) # B 64*64
+        bsize = masks.view(*masks.size()[:-3], -1).sum(-1)+.01
+        out = (inp.unsqueeze(2)*masks).view(b, inp.size(1), 2, -1) # B 64 2 4096
+        out = (out/bsize.unsqueeze(-1).sqrt()) # B 64 2 1024
+        out = (out[:,:,0].unsqueeze(1)*out[:,:,1].unsqueeze(2)).view(b, -1, out.size(-1)).sum(-1) # B w*w (network width^2)
         return out.sign().float()*(out.abs()+.00001).sqrt() # signed sqrt normalization
     
     

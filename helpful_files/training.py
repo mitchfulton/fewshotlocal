@@ -16,6 +16,9 @@ def load_transform(path, boxdict, transform, flipping, masking):
     t = transform(p)
     # Load the bounding boxes
     m = t
+    
+    #I'm removing this section altogether b/c I'm not using annotated bounding boxes right now
+    """
     if masking:
         allmasks = np.zeros((10,10))
         boxes = boxdict[path]
@@ -45,6 +48,7 @@ def load_transform(path, boxdict, transform, flipping, masking):
             # Take the union of the previous and current masks
             allmasks = 1 - (1-allmasks)*(1-mask) 
         m = torch.FloatTensor(allmasks).unsqueeze(0)
+    """
     return [t, m]
 
 
@@ -91,13 +95,13 @@ def train(train_loader, models, optimizer, criterion, way, shots, verbosity):
     allloss = [0]*ensemble
     acctracker = [0]*ensemble
     print("Training images covered this round:")
-    for i, ((inp, masks), _) in enumerate(train_loader):
-        inp = inp.cuda()
-        masks = masks.cuda()
+    for i, (img, dat, cd_score) in enumerate(train_loader):
+        img = img.float().cuda()
+        #masks = masks.cuda()
         for j in range(ensemble):
             models[j].zero_grad()
             # Predict, step
-            out = models[j](inp, masks)
+            out = models[j](img, img)
             loss = criterion(out, targ)
             loss.backward()
             optimizer[j].step()
