@@ -3,6 +3,7 @@ import torch
 from copy import deepcopy
 from PIL import Image
 from torch.utils.data import Sampler
+from tqdm import tqdm
 
 
 def load_transform(path, boxdict, transform, flipping, masking):
@@ -55,11 +56,11 @@ def load_transform(path, boxdict, transform, flipping, masking):
 class ProtoSampler(Sampler):
     def __init__(self, data_source, way, shots):
         iddict = dict()
-        for i,cat in enumerate(data_source.numer_data):
-            if cat[22] in iddict:
-                iddict[cat[22]].append(i)
+        for i,(_,_,cat) in enumerate(tqdm(data_source)):
+            if cat in iddict:
+                iddict[cat].append(i)
             else:
-                iddict[cat[22]] = [i]
+                iddict[cat] = [i]
         self.iddict = iddict
         self.way = way
         self.shots = shots
@@ -94,6 +95,7 @@ def train(train_loader, models, optimizer, criterion, way, shots, verbosity):
     targ = torch.LongTensor([i//nqueries for i in range(nqueries*way)]).cuda()
     allloss = [0]*ensemble
     acctracker = [0]*ensemble
+    #val_acc = [0]*ensemble
     print("Training images covered this round:")
     for i, (img, dat, cd_score) in enumerate(train_loader):
         img = img.float().cuda()
@@ -108,9 +110,10 @@ def train(train_loader, models, optimizer, criterion, way, shots, verbosity):
             # Record training statistics
             allloss[j] += loss.item()
             _,bins = torch.max(out,1)
+            #print(bins,targ)
             acc = torch.sum(torch.eq(bins,targ)).item()/nqueries/way
             acctracker[j] += acc
-        if i%verbosity == 0:
-            print('%d of approx. 192270'%(i*way*sum(shots)))
-    return [L/(i+1) for L in allloss], [L/(i+1) for L in acctracker]
+            
+    return [L/(i+1) for L in allloss], [L/(i+1) for L in acctracker] 
+
 

@@ -7,7 +7,7 @@ from copy import deepcopy
 from PIL import Image
 from torch.utils.data import Sampler
 from helpful_files.networks import fbpredict, predict
-
+from tqdm import tqdm
 
 
 def load_transform(path, boxdict, transform, masking):
@@ -47,7 +47,7 @@ def load_transform(path, boxdict, transform, masking):
 class OrderedSampler(Sampler):
     def __init__(self, data_source, bsize):
         iddict = dict()
-        for i,(_,cat) in enumerate(data_source.imgs):
+        for i,(_,_,cat) in enumerate(tqdm(data_source)):
             if cat in iddict:
                 iddict[cat].append(i)
             else:
@@ -176,8 +176,9 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
     count = 0
     allcount = 0
     progress = torch.zeros(1, way)
-    for i, ((inp,_), cat) in enumerate(loader):
+    for i, (inp, dat, cat) in enumerate(loader):
         catindex = cat[0]
+        print(cat)
         if catindex != lastcat: # We're about to move to another category
             # Write the values
             if i!= 0:
@@ -188,6 +189,7 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
             lastcat = catindex # Record the current category
             count = 0 # Reset divisor
             right = [0]*esize # Reset accumulator
+            """
             progress[0, lastcat] = 1
             # Plot progress
             display.clear_output(wait=True)
@@ -198,17 +200,24 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
             pl.yticks([])
             pl.show()
             sleep(.01)
+            """
 
         # Predict
-        inp = inp.cuda()
+        inp = inp.float().cuda()
         targ = cat.cuda()
         with torch.no_grad():
             for j in range(esize):
                 out = models[j](inp)
                 out = expanders[j](out, bcentroids[j], None)
+                #print(out)
+                print(centroids[j].unsqueeze(0).size(),out.unsqueeze(1).size())
                 out = predict(centroids[j].unsqueeze(0), out.unsqueeze(1))
+                #print(out)
                 _, pred = out.topk(k, 1, True, True)
+                #print(pred)
                 pred = pred.t()
+                print(pred,targ)
+                #print(pred)
                 right[j] += pred.eq(targ.view(1, -1).expand_as(pred))[:k].view(-1).sum(0, keepdim=True).float().item()
         count += inp.size(0)
 

@@ -146,6 +146,7 @@ class KiTS_Set(Dataset):
 		else:
 			label = 1.
 		"""
+		cd = ['0','1','2','3a','3b','4']
 		
 		#convert all to numpy
 		
@@ -157,7 +158,7 @@ class KiTS_Set(Dataset):
 		
 		pt_data_out = np.array(datlist)
 		
-		cd_score_out = case[22]
+		cd_score_out = cd.index(case[22])
 		
 		
 		#shuffle axes, resize, add channel axis to image
