@@ -4,7 +4,8 @@ from copy import deepcopy
 from PIL import Image
 from torch.utils.data import Sampler
 from tqdm import tqdm
-
+import torchio
+from scipy.ndimage import zoom
 
 def load_transform(path, boxdict, transform, flipping, masking):
     # Load the image
@@ -52,11 +53,25 @@ def load_transform(path, boxdict, transform, flipping, masking):
     """
     return [t, m]
 
+def pt_data_expand(dat,data_shape):
+    vecs = torch.tensor([])
+    for vec in dat:
+        #print(vec.size(),data_shape[2:])
+        vec = torch.unsqueeze(vec,0)
+        b_mat = vec.T*vec
+        b_mat = torch.unsqueeze(b_mat,2)
+        vec = (vec*b_mat)
+        zoom_vals = tuple(want/have for want,have in zip(data_shape, vec.size()))
+        vec = torch.tensor(zoom(vec,zoom_vals))
+        vec = torch.unsqueeze(vec,0) #channel, next one is batch size
+        vecs = torch.cat((vecs,torch.unsqueeze(vec,0)))
+    return vecs
 
 class ProtoSampler(Sampler):
     def __init__(self, data_source, way, shots):
         iddict = dict()
-        for i,(_,_,cat) in enumerate(tqdm(data_source)):
+        for i,pt in enumerate(tqdm(data_source)):
+            cat = pt['cat']
             if cat in iddict:
                 iddict[cat].append(i)
             else:
@@ -97,13 +112,16 @@ def train(train_loader, models, optimizer, criterion, way, shots, verbosity):
     acctracker = [0]*ensemble
     #val_acc = [0]*ensemble
     print("Training images covered this round:")
-    for i, (img, dat, cd_score) in enumerate(train_loader):
-        img = img.float().cuda()
+    for i, pt in enumerate(train_loader):
+        img = pt['img'][torchio.DATA].float().cuda()
+        dat = pt['dat'].float()
+        dat = torch.clamp((dat + (torch.rand(dat.size())-0.5)/5.), 0., 1.) #add noise
+        dat = pt_data_expand(dat,img.size()[2:]).cuda() #expand to 3d
         #masks = masks.cuda()
         for j in range(ensemble):
             models[j].zero_grad()
             # Predict, step
-            out = models[j](img, img)
+            out = models[j](img, img, dat)
             loss = criterion(out, targ)
             loss.backward()
             optimizer[j].step()

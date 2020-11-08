@@ -8,6 +8,8 @@ from PIL import Image
 from torch.utils.data import Sampler
 from helpful_files.networks import fbpredict, predict
 from tqdm import tqdm
+import torchio
+from scipy.ndimage import zoom
 
 
 def load_transform(path, boxdict, transform, masking):
@@ -42,12 +44,27 @@ def load_transform(path, boxdict, transform, masking):
             allmasks = 1 - (1-allmasks)*(1-mask) 
         m = torch.FloatTensor(allmasks).unsqueeze(0)
     return [t, m]
+    
+def pt_data_expand(dat,data_shape):
+    vecs = torch.tensor([])
+    for vec in dat:
+        #print(vec.size(),data_shape[2:])
+        vec = torch.unsqueeze(vec,0)
+        b_mat = vec.T*vec
+        b_mat = torch.unsqueeze(b_mat,2)
+        vec = (vec*b_mat)
+        zoom_vals = tuple(want/have for want,have in zip(data_shape, vec.size()))
+        vec = torch.tensor(zoom(vec,zoom_vals))
+        vec = torch.unsqueeze(vec,0) #channel, next one is batch size
+        vecs = torch.cat((vecs,torch.unsqueeze(vec,0)))
+    return vecs
 
 
 class OrderedSampler(Sampler):
     def __init__(self, data_source, bsize):
         iddict = dict()
-        for i,(_,_,cat) in enumerate(tqdm(data_source)):
+        for i,pt in enumerate(tqdm(data_source)):
+            cat = pt['cat']
             if cat in iddict:
                 iddict[cat].append(i)
             else:
@@ -125,8 +142,8 @@ def accumulate(models, loader, expanders, bcentroids, way, d):
     running = torch.zeros(esize, d).cuda()
     counts = [0]*way
     progress = torch.zeros(1, way)
-    for i, (inp,_, cat) in enumerate(loader):
-        catindex = cat[0]
+    for i, pt in enumerate(loader):
+        catindex = pt['cat'][0]
 
         # Moving to another category
         if catindex != lastcat: 
@@ -140,7 +157,8 @@ def accumulate(models, loader, expanders, bcentroids, way, d):
             
             progress[0, lastcat] = 1
             # Plot progress
-            display.clear_output(wait=True)
+            """
+            #display.clear_output(wait=True)
             pl.figure(figsize=(20,1))
             pl.imshow(progress.numpy(), cmap='Greys')
             pl.title("Accumulating category prototypes:")
@@ -148,13 +166,16 @@ def accumulate(models, loader, expanders, bcentroids, way, d):
             pl.yticks([])
             pl.show()
             sleep(.01)
+            """
             
 
         # Continue accumulating
-        inp = inp.float().cuda()
+        inp = pt['img'][torchio.DATA].float().cuda()
+        dat = pt['dat'].float()
+        dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
         with torch.no_grad():
             for j in range(esize):
-                out = models[j](inp) # b 64 10 10
+                out = models[j](inp,dat) # b 64 10 10
                 out = expanders[j](out, bcentroids[j], None) # b d
                 running[j] += out.sum(0) # Accumulate prototypes
         count += inp.size(0) # Accumulate the divisor
@@ -178,8 +199,8 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
     count = 0
     allcount = 0
     progress = torch.zeros(1, way)
-    for i, (inp, dat, cat) in enumerate(loader):
-        catindex = cat[0]
+    for i, pt in enumerate(loader):
+        catindex = pt['cat'][0]
         #print(cat)
         if catindex != lastcat: # We're about to move to another category
             # Write the values
@@ -205,11 +226,13 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
             """
 
         # Predict
-        inp = inp.float().cuda()
-        targ = cat.cuda()
+        inp = pt['img'][torchio.DATA].float().cuda()
+        targ = pt['cat'].cuda()
+        dat = pt['dat'].float()
+        dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
         with torch.no_grad():
             for j in range(esize):
-                out = models[j](inp)
+                out = models[j](inp,dat)
                 out = expanders[j](out, bcentroids[j], None)
                 #print(out)
                 #print(centroids[j].unsqueeze(0).size(),out.unsqueeze(1).size())

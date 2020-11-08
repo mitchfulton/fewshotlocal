@@ -35,12 +35,17 @@ class PROTO(nn.Module):
     def forward(self, inp):
         return self.process(inp)
 """
+
+
+
+
+
 class Block(nn.Module):
     def __init__(self, insize, outsize, kern, pad, stride):
         super(Block, self).__init__()
         self.layers = nn.Sequential(
             nn.Conv3d(insize, outsize, kernel_size=kern, padding=pad, stride = stride),
-            nn.BatchNorm3d(outsize),
+            nn.InstanceNorm3d(outsize),
             nn.PReLU()
         )
         
@@ -49,20 +54,63 @@ class Block(nn.Module):
 
 # The 4-layer feature extractor
 class PROTO(nn.Module):
-    def __init__(self, w):
+    def __init__(self, w, dat_flag=False):
         super(PROTO, self).__init__()
+        
+        self.dat_flag = dat_flag
+        
+        self.dat1 = Block(1,w,7,3,1)
+        self.img1 = Block(1,w,7,3,1)
+        
+        if self.dat_flag:
+            self.process = nn.Sequential(
+                Block(2*w,w,7,3,2),
+                nn.MaxPool3d(2),
+                Block(w,w,5,2,1),
+                Block(w,w,5,2,2),
+                nn.MaxPool3d(2),
+                Block(w,w,3,1,1),
+                Block(w,w,3,1,1),
+                nn.MaxPool3d(2),
+                Block(w,w,3,1,1),
+                Block(w,w,3,1,1)
+            )
+        else:
+            self.process = nn.Sequential(
+                Block(w,w,7,3,2),
+                nn.MaxPool3d(2),
+                Block(w,w,5,2,1),
+                Block(w,w,5,2,2),
+                nn.MaxPool3d(2),
+                Block(w,w,3,1,1),
+                Block(w,w,3,1,1),
+                nn.MaxPool3d(2),
+                Block(w,w,3,1,1),
+                Block(w,w,3,1,1)
+            )
+        """
         self.process = nn.Sequential(
-            Block(1,w,(7,7,5),3,2),
+            Block(1,w,7,3,1),
+            Block(w,w,7,3,2),
             nn.MaxPool3d(2),
-            Block(w,w,(5,5,3),2,1),
+            Block(w,w,5,2,1),
+            Block(w,w,5,2,2),
             nn.MaxPool3d(2),
             Block(w,w,3,1,1),
+            Block(w,w,3,1,1),
             nn.MaxPool3d(2),
+            Block(w,w,3,1,1),
             Block(w,w,3,1,1)
         )
+        """
         
-    def forward(self, inp):
-        return self.process(inp)
+    def forward(self, inp, dat):
+        inp = self.img1(inp)
+        if self.dat_flag:
+            dat = self.dat1(dat)
+            out = torch.cat((inp,dat),dim=1)
+    
+        return self.process(out)
 
 
 
@@ -251,9 +299,9 @@ def fsCL(inp, fbvectors, _):
     
     
 class Network(nn.Module):
-    def __init__(self, w, folding, cova, local, proto, shots):
+    def __init__(self, w, folding, cova, local, proto, shots, dat_flag):
         super(Network, self).__init__()
-        self.encode = PROTO(w)
+        self.encode = PROTO(w, dat_flag=dat_flag)
         self.shots = shots
         # Numerical codes here correspond to the codes used in the ablation study figure
         if not local:
@@ -276,10 +324,10 @@ class Network(nn.Module):
             self.predict = ufPredict(shots[-2]) # Unfolded prediction
     
     
-    def forward(self, inp, masks):
+    def forward(self, inp, masks, dat):
         assert inp.size(0)%sum(self.shots) == 0, "Error: batch size does not match given shot values."
         way = inp.size(0)//sum(self.shots)
-        out = self.encode(inp)
+        out = self.encode(inp, dat)
         out = self.postprocess(out, masks, way)
         out = self.predict(out, way)
         return out
