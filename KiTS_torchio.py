@@ -121,7 +121,7 @@ def load_KiTS_torchio(data_shape,trn_pct,transform=None):
 		image_out = zoom(image_out,zoom_vals)
 		image_out = image_out[np.newaxis,:,:,:]
 		
-		"""
+		
 		a = np.array(datlist)
 		a = np.expand_dims(a,0)
 		b_mat = a.T*a
@@ -130,12 +130,12 @@ def load_KiTS_torchio(data_shape,trn_pct,transform=None):
 		zoom_vals = tuple(want/have for want,have in zip(data_shape, pt_data_out.shape))
 		pt_data_out = zoom(pt_data_out,zoom_vals)
 		pt_data_out = pt_data_out[np.newaxis,:,:,:]
-		"""
-		pt_data_out = torch.tensor(datlist)
+		
+		#pt_data_out = torch.tensor(datlist)
 		
 		subj = tio.Subject(
 				img=tio.ScalarImage(tensor=torch.tensor(image_out)),
-				dat=pt_data_out,
+				dat=tio.ScalarImage(tensor=torch.tensor(pt_data_out)),
 				cat=cd_score_out,
 			)
 		subjects.append(subj)

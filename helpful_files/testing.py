@@ -12,6 +12,7 @@ import torchio
 from scipy.ndimage import zoom
 
 
+
 def load_transform(path, boxdict, transform, masking):
     # Load the image
     with open(path, 'rb') as f:
@@ -45,6 +46,7 @@ def load_transform(path, boxdict, transform, masking):
         m = torch.FloatTensor(allmasks).unsqueeze(0)
     return [t, m]
     
+"""
 def pt_data_expand(dat,data_shape):
     vecs = torch.tensor([])
     for vec in dat:
@@ -58,7 +60,7 @@ def pt_data_expand(dat,data_shape):
         vec = torch.unsqueeze(vec,0) #channel, next one is batch size
         vecs = torch.cat((vecs,torch.unsqueeze(vec,0)))
     return vecs
-
+"""
 
 class OrderedSampler(Sampler):
     def __init__(self, data_source, bsize):
@@ -171,8 +173,8 @@ def accumulate(models, loader, expanders, bcentroids, way, d):
 
         # Continue accumulating
         inp = pt['img'][torchio.DATA].float().cuda()
-        dat = pt['dat'].float()
-        dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
+        dat = pt['dat'][torchio.DATA].float().cuda()
+        #dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
         with torch.no_grad():
             for j in range(esize):
                 out = models[j](inp,dat) # b 64 10 10
@@ -199,6 +201,8 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
     count = 0
     allcount = 0
     progress = torch.zeros(1, way)
+    targs = []
+    preds = []
     for i, pt in enumerate(loader):
         catindex = pt['cat'][0]
         #print(cat)
@@ -228,22 +232,21 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
         # Predict
         inp = pt['img'][torchio.DATA].float().cuda()
         targ = pt['cat'].cuda()
-        dat = pt['dat'].float()
-        dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
+        dat = pt['dat'][torchio.DATA].float().cuda()
+        #dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
         with torch.no_grad():
             for j in range(esize):
                 out = models[j](inp,dat)
                 out = expanders[j](out, bcentroids[j], None)
-                #print(out)
-                #print(centroids[j].unsqueeze(0).size(),out.unsqueeze(1).size())
                 out = predict(centroids[j].unsqueeze(0), out.unsqueeze(1))
-                #print(out)
                 _, pred = out.topk(k, 1, True, True)
-                #print(pred)
                 pred = pred.t()
-                #print(pred,targ)
-                #print(pred)
+                
+                targs.append(targ.tolist())
+                preds.append([x for x in pred.tolist()])
+                
                 right[j] += pred.eq(targ.view(1, -1).expand_as(pred))[:k].view(-1).sum(0, keepdim=True).float().item()
+                
         count += inp.size(0)
 
     # Record last category
@@ -255,7 +258,7 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
     # Final reporting / recording
     allacc = [r/allcount for r in allright]
     
-    return allacc, np.mean(perclassacc, axis=0), np.mean(perclassacc, axis=1)
+    return allacc, np.mean(perclassacc, axis=0), np.mean(perclassacc, axis=1),targs,preds
 
 
 

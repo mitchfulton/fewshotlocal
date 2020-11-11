@@ -52,7 +52,7 @@ def load_transform(path, boxdict, transform, flipping, masking):
         m = torch.FloatTensor(allmasks).unsqueeze(0)
     """
     return [t, m]
-
+"""
 def pt_data_expand(dat,data_shape):
     vecs = torch.tensor([])
     for vec in dat:
@@ -66,7 +66,7 @@ def pt_data_expand(dat,data_shape):
         vec = torch.unsqueeze(vec,0) #channel, next one is batch size
         vecs = torch.cat((vecs,torch.unsqueeze(vec,0)))
     return vecs
-
+"""
 class ProtoSampler(Sampler):
     def __init__(self, data_source, way, shots):
         iddict = dict()
@@ -114,9 +114,9 @@ def train(train_loader, models, optimizer, criterion, way, shots, verbosity):
     print("Training images covered this round:")
     for i, pt in enumerate(train_loader):
         img = pt['img'][torchio.DATA].float().cuda()
-        dat = pt['dat'].float()
-        dat = torch.clamp((dat + (torch.rand(dat.size())-0.5)/5.), 0., 1.) #add noise
-        dat = pt_data_expand(dat,img.size()[2:]).cuda() #expand to 3d
+        dat = pt['dat'][torchio.DATA].float().cuda()
+        #dat = torch.clamp((dat + (torch.rand(dat.size())-0.5)/5.), 0., 1.) #add noise
+        #dat = pt_data_expand(dat,img.size()[2:]).cuda() #expand to 3d
         #masks = masks.cuda()
         for j in range(ensemble):
             models[j].zero_grad()

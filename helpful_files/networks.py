@@ -59,21 +59,18 @@ class PROTO(nn.Module):
         
         self.dat_flag = dat_flag
         
-        self.dat1 = Block(1,w,7,3,1)
-        self.img1 = Block(1,w,7,3,1)
+        self.dat1 = Block(1,w,7,3,2)
+        self.img1 = Block(1,w,7,3,2)
         
         if self.dat_flag:
             self.process = nn.Sequential(
                 Block(2*w,w,7,3,2),
                 nn.MaxPool3d(2),
-                Block(w,w,5,2,1),
-                Block(w,w,5,2,2),
+                Block(w,w,5,1,1),
+                Block(w,w,5,1,2),
                 nn.MaxPool3d(2),
                 Block(w,w,3,1,1),
                 Block(w,w,3,1,1),
-                nn.MaxPool3d(2),
-                Block(w,w,3,1,1),
-                Block(w,w,3,1,1)
             )
         else:
             self.process = nn.Sequential(
@@ -84,9 +81,6 @@ class PROTO(nn.Module):
                 nn.MaxPool3d(2),
                 Block(w,w,3,1,1),
                 Block(w,w,3,1,1),
-                nn.MaxPool3d(2),
-                Block(w,w,3,1,1),
-                Block(w,w,3,1,1)
             )
         """
         self.process = nn.Sequential(
