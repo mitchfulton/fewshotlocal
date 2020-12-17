@@ -39,7 +39,7 @@ class PROTO(nn.Module):
 
 
 
-
+"""
 class Block(nn.Module):
     def __init__(self, insize, outsize, kern, pad, stride):
         super(Block, self).__init__()
@@ -59,30 +59,32 @@ class PROTO(nn.Module):
         
         self.dat_flag = dat_flag
         
-        self.dat1 = Block(1,w,7,3,2)
-        self.img1 = Block(1,w,7,3,2)
+        #self.dat1 = Block(1,w,7,3,2)
+        self.img1 = nn.Sequential(
+                    Block(1,w,3,1,1),
+                    Block(w,w,3,1,1),
+                    nn.MaxPool3d(2),
+                    Block(w,w,3,1,1),
+                    Block(w,w,3,1,1),
+                    nn.MaxPool3d(2),
+                    Block(w,w,3,1,1),
+                    Block(w,w,3,1,1),
+                    nn.MaxPool3d(2),
+                    Block(w,w,3,1,1),
+                    Block(w,w,3,1,1),
+                    nn.MaxPool3d(2),
+                    )
         
         if self.dat_flag:
             self.process = nn.Sequential(
-                Block(2*w,w,7,3,2),
-                nn.MaxPool3d(2),
-                Block(w,w,5,1,1),
-                Block(w,w,5,1,2),
-                nn.MaxPool3d(2),
-                Block(w,w,3,1,1),
-                Block(w,w,3,1,1),
+                Block(1+w,w,3,1,1),
+                Block(w,w,3,1,1)
             )
         else:
             self.process = nn.Sequential(
-                Block(w,w,7,3,2),
-                nn.MaxPool3d(2),
-                Block(w,w,5,2,1),
-                Block(w,w,5,2,2),
-                nn.MaxPool3d(2),
                 Block(w,w,3,1,1),
                 Block(w,w,3,1,1),
             )
-        """
         self.process = nn.Sequential(
             Block(1,w,7,3,1),
             Block(w,w,7,3,2),
@@ -96,15 +98,60 @@ class PROTO(nn.Module):
             Block(w,w,3,1,1),
             Block(w,w,3,1,1)
         )
-        """
-        
-    def forward(self, inp, dat):
-        inp = self.img1(inp)
-        if self.dat_flag:
-            dat = self.dat1(dat)
-            out = torch.cat((inp,dat),dim=1)
+    """
     
-        return self.process(out)
+def conv_block_3d(in_dim, out_dim, activation,stride=1):
+    return nn.Sequential(
+        nn.Conv3d(in_dim, out_dim, kernel_size=3, stride=1, padding=1),
+        #nn.BatchNorm3d(out_dim),
+        nn.InstanceNorm3d(out_dim,affine=True),
+        activation,)
+        
+def max_pooling_3d():
+    return nn.MaxPool3d(kernel_size=2, stride=2, padding=0)
+
+def conv_block_2_3d(in_dim, out_dim, activation,stride=1):
+    return nn.Sequential(
+        conv_block_3d(in_dim, out_dim, activation,stride=stride),
+        nn.Conv3d(out_dim, out_dim, kernel_size=3, stride=stride, padding=1),
+        nn.InstanceNorm3d(out_dim,affine=True),
+        nn.PReLU())  
+        
+        
+class PROTO(nn.Module):
+    def __init__(self, w, dat_flag=False):
+        super(PROTO, self).__init__()
+        
+        self.in_dim = 1
+        self.out_dim = 1
+        self.num_filters = w
+        activation = nn.PReLU()
+        
+        
+        self.down_1 = conv_block_2_3d(self.in_dim, self.num_filters, activation,stride=2)
+        self.pool_1 = max_pooling_3d()
+        self.down_2 = conv_block_2_3d(self.num_filters, self.num_filters, activation)
+        self.pool_2 = max_pooling_3d()
+        self.down_3 = conv_block_2_3d(self.num_filters , self.num_filters, activation)
+        self.pool_3 = max_pooling_3d()
+        self.down_4 = conv_block_2_3d(self.num_filters , self.num_filters , activation)
+        
+    
+    
+    
+    def forward(self, inp, dat):
+        
+        # Down sampling
+        inp = self.down_1(inp) # -> [1, 4, 128, 128, 128]
+        inp = self.pool_1(inp) # -> [1, 4, 64, 64, 64]
+        inp = self.down_2(inp) # -> [1, 8, 64, 64, 64]
+        inp = self.pool_2(inp) # -> [1, 8, 32, 32, 32]
+        
+        inp = self.down_3(inp) # -> [1, 16, 32, 32, 32]
+        inp = self.pool_3(inp) # -> [1, 16, 16, 16, 16]
+        
+        inp = self.down_4(inp) # -> [1, 32, 16, 16, 16]
+        return inp
 
 
 
@@ -321,6 +368,8 @@ class Network(nn.Module):
     def forward(self, inp, masks, dat):
         assert inp.size(0)%sum(self.shots) == 0, "Error: batch size does not match given shot values."
         way = inp.size(0)//sum(self.shots)
+        if self.training:
+            dat = dat + torch.randn_like(dat)/10.
         out = self.encode(inp, dat)
         out = self.postprocess(out, masks, way)
         out = self.predict(out, way)

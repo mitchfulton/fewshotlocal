@@ -173,7 +173,7 @@ def accumulate(models, loader, expanders, bcentroids, way, d):
 
         # Continue accumulating
         inp = pt['img'][torchio.DATA].float().cuda()
-        dat = pt['dat'][torchio.DATA].float().cuda()
+        dat = pt['dat'].float().cuda()
         #dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
         with torch.no_grad():
             for j in range(esize):
@@ -232,7 +232,7 @@ def score(k, centroids, bcentroids, models, loader, expanders, way):
         # Predict
         inp = pt['img'][torchio.DATA].float().cuda()
         targ = pt['cat'].cuda()
-        dat = pt['dat'][torchio.DATA].float().cuda()
+        dat = pt['dat'].float().cuda()
         #dat = pt_data_expand(dat,inp.size()[2:]).cuda() #expand to 3d
         with torch.no_grad():
             for j in range(esize):

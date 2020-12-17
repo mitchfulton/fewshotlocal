@@ -114,7 +114,7 @@ def train(train_loader, models, optimizer, criterion, way, shots, verbosity):
     print("Training images covered this round:")
     for i, pt in enumerate(train_loader):
         img = pt['img'][torchio.DATA].float().cuda()
-        dat = pt['dat'][torchio.DATA].float().cuda()
+        dat = pt['dat'].float().cuda()
         #dat = torch.clamp((dat + (torch.rand(dat.size())-0.5)/5.), 0., 1.) #add noise
         #dat = pt_data_expand(dat,img.size()[2:]).cuda() #expand to 3d
         #masks = masks.cuda()

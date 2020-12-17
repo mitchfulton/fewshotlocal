@@ -107,7 +107,7 @@ def load_KiTS_torchio(data_shape,trn_pct,transform=None):
 		image_out = img.get_fdata()
 		image_out = np.clip(image_out,-80,300) #right now is [-1024 3071]
 		image_out = (image_out - np.min(image_out))/(np.max(image_out) - np.min(image_out))
-		(img.get_fdata()-np.min(img.get_fdata()))/np.max(img.get_fdata()-np.min(img.get_fdata()))
+		#(img.get_fdata()-np.min(img.get_fdata()))/np.max(img.get_fdata()-np.min(img.get_fdata()))
 		
 		
 		
@@ -116,7 +116,7 @@ def load_KiTS_torchio(data_shape,trn_pct,transform=None):
 		
 		
 		#shuffle axes, resize, add channel axis to image
-		image_out = np.moveaxis(image_out, [0, 1], [-1, -2])
+		#image_out = np.moveaxis(image_out, [0, 1], [-1, -2])
 		zoom_vals = tuple(want/have for want,have in zip(data_shape, image_out.shape))
 		image_out = zoom(image_out,zoom_vals)
 		image_out = image_out[np.newaxis,:,:,:]
@@ -127,7 +127,7 @@ def load_KiTS_torchio(data_shape,trn_pct,transform=None):
 		b_mat = a.T*a
 		b_mat = np.expand_dims(b_mat,2)
 		pt_data_out = a*b_mat
-		zoom_vals = tuple(want/have for want,have in zip(data_shape, pt_data_out.shape))
+		zoom_vals = tuple(want/have for want,have in zip((16,16,16), pt_data_out.shape))
 		pt_data_out = zoom(pt_data_out,zoom_vals)
 		pt_data_out = pt_data_out[np.newaxis,:,:,:]
 		
@@ -135,7 +135,7 @@ def load_KiTS_torchio(data_shape,trn_pct,transform=None):
 		
 		subj = tio.Subject(
 				img=tio.ScalarImage(tensor=torch.tensor(image_out)),
-				dat=tio.ScalarImage(tensor=torch.tensor(pt_data_out)),
+				dat=torch.tensor(pt_data_out),
 				cat=cd_score_out,
 			)
 		subjects.append(subj)
